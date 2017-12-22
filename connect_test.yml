@@ -1,0 +1,9 @@
+- hosts: server-mod
+  vars:
+    output: ""
+  tasks:
+    - name: ポート変更後のサーバへの接続テスト
+      command: echo "connect_test"
+      register: output
+
+    - debug: var=output

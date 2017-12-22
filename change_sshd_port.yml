@@ -1,0 +1,60 @@
+- hosts: server
+  vars:
+    now_date: "{{ lookup('pipe','date +%Y%m%d%H%M') }}"
+    server_locale_ip: 192.168.1.7
+    sshd_port: 2222
+    nic: eth0
+  tasks:
+    - name: sshd_configのバックアップ
+      copy:
+        src: /etc/ssh/sshd_config
+        dest: /etc/ssh/sshd_config.bk.{{now_date}}
+        remote_src: yes
+
+    - name: sshd_configの編集
+      lineinfile:
+        dest: /etc/ssh/sshd_config
+        insertafter: "#Port\ 22"
+        line: "Port {{sshd_port}}"
+        state: present
+
+    - name: iptablesのバックアップ
+      copy:
+        src: /etc/sysconfig/iptables
+        dest: /etc/sysconfig/iptables.bk.{{now_date}}
+        remote_src: yes
+
+    # - name: デフォルトポートのクローズ
+    #   command: sh -c "iptables -F INPUT -p tcp --dport 22 -j ACCEPT"
+
+    # - name: 変更したポートのオープン
+    #   command: sh -c "iptables -A INPUT -p tcp --dport {{sshd_port}} -j ACCEPT"
+
+    - name: ファイアウォール設定の編集
+      lineinfile:
+        dest: /etc/sysconfig/iptables
+        regexp: "--dport\ 22"
+        line: "-A INPUT -p tcp --dport {{sshd_port}} -j ACCEPT"
+        state: present
+
+    - name: NICのコンフィグファイルのバックアップ
+      copy:
+        src: /etc/sysconfig/network-scripts/ifcfg-{{nic}}
+        dest: /etc/sysconfig/network-scripts/ifcfg-{{nic}}bk.{{now_date}}
+        remote_src: yes
+
+    - name: NICの自動起動設定
+      lineinfile:
+        dest: /etc/sysconfig/network-scripts/ifcfg-{{nic}}
+        regexp: "ONBOOT=no"
+        line: "ONBOOT=yes"
+        state: present
+
+    - name: 再起動
+      shell: sleep 2 && shutdown -r now "Ansible updates triggered"
+      async: 1
+      poll: 0
+      ignore_errors: true
+
+    - name: 再起動待機
+      local_action: wait_for host={{ server_locale_ip }} port={{sshd_port}} state=started delay=10 timeout=300
